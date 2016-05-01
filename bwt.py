@@ -4,6 +4,7 @@ burrows-wheeler transform for genome data
 '''
 
 import sys
+from enum import Enum
 
 def suffix_array(s):
     '''build suffix array of string s'''
@@ -111,9 +112,16 @@ C = {} #
 O = {} # defined below
 D = [] #
 
+# enum represents the type of the alignment choice
+Type = Enum('Type', 'START MATCH MISMATCH INSERTION DELETION')
+
+# penalties:
+gap_open = 1
+gap_ext = 1
+mismatch = 1
+
 # option switches:
 NO_INDELS = False
-
 
 
 def inexact_search(bw, bwr, s, diff):
@@ -145,7 +153,7 @@ def inexact_search(bw, bwr, s, diff):
     D = compute_D(s, C, Oprime, bw)
 
     #call the secursive search function and return a list of SA-range tuples
-    return inexact_recursion(s, len(s)-1, diff,0,len(bw)-1)
+    return inexact_recursion(s, len(s)-1, diff,0,len(bw)-1, Type.START)
 
 
 def compute_C(totals):
@@ -196,7 +204,7 @@ def get_O(char, index):
     else:
         return O[char][index]
 
-def inexact_recursion(s,i,diff,k,l):
+def inexact_recursion(s,i,diff,k,l, prev_type):
     '''search bwt recursively and tolerate errors'''
 
     #pruning based on estimated mistakes
@@ -211,10 +219,14 @@ def inexact_recursion(s,i,diff,k,l):
         return temp
 
     #search
-    sa_idx = set() #sset of suffix array indicces at which a match starts 
+    sa_idx = set() #set of suffix array indices at which a match starts 
     
     if not NO_INDELS: 
-        sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-1,k,l))
+    # Insertion
+        if prev_type == Type.INSERTION:
+            sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-gap_ext,k,l,Type.INSERTION))
+        else:
+            sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-gap_ext-gap_open,k,l,Type.INSERTION))
 
     for char in alphabet:
         temp_k = C[char] + get_O(char, k-1) + 1
@@ -222,13 +234,18 @@ def inexact_recursion(s,i,diff,k,l):
 
         if temp_k <= temp_l:
             if not NO_INDELS:
-                sa_idx = sa_idx.union(inexact_recursion(s,i,diff-1,temp_k,temp_l))
-
+            # Deletion
+                if prev_type == Type.DELETION:
+                    sa_idx = sa_idx.union(inexact_recursion(s,i,diff-gap_ext,temp_k,temp_l,Type.DELETION))
+                else:
+                    sa_idx = sa_idx.union(inexact_recursion(s,i,diff-gap_ext-gap_open,temp_k,temp_l,Type.DELETION))
             if char == s[i]:
-                sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff,temp_k,temp_l))
+                # Match!
+                sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff,temp_k,temp_l,Type.MATCH))
                 
             else:
-                sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-1,temp_k,temp_l))
+                # Mismatch
+                sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-mismatch,temp_k,temp_l, Type.MISMATCH))
 
     return sa_idx
 
@@ -241,7 +258,7 @@ def print_output(sa_index_set, sa, s):
     print str(len(sa_values)) + " match(es) found!\n"
     print "Position\tSuffix\n"
     for v in sa_values:
-        print str(v) + "\t\t" + s[(v-1):]
+        print str(v) + "\t\t" + s[v:]
 
     print '----------------------------------------'
 
