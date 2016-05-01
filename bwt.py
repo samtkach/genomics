@@ -94,15 +94,27 @@ def count_matches_exact(bw,s):
     return r-l
 
 
+# =============================================================================
+#                       Inexact Matching Functions & Variables
+# =============================================================================
+
+
 # bw is bwt of genome (B)
 # bwr is bwt of reverse genome (B')
 # s is short read to be matched (W)
 # diff is max num of differences (z)
 
+#alphabet of symbols in allowed
 alphabet = set(['A', 'T', 'C', 'G'])
-C = {}
-O = {}
-D = []
+
+C = {} # 
+O = {} # defined below
+D = [] #
+
+# option switches:
+NO_INDELS = False
+
+
 
 def inexact_search(bw, bwr, s, diff):
     '''find suffix array intervals with up to diff differences'''
@@ -200,20 +212,38 @@ def inexact_recursion(s,i,diff,k,l):
 
     #search
     sa_idx = set() #sset of suffix array indicces at which a match starts 
-    sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-1,k,l))
+    
+    if not NO_INDELS: 
+        sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-1,k,l))
+
     for char in alphabet:
         temp_k = C[char] + get_O(char, k-1) + 1
         temp_l = C[char] + get_O(char, l)
 
         if temp_k <= temp_l:
-            sa_idx = sa_idx.union(inexact_recursion(s,i,diff-1,temp_k,temp_l))
+            if not NO_INDELS:
+                sa_idx = sa_idx.union(inexact_recursion(s,i,diff-1,temp_k,temp_l))
+
             if char == s[i]:
                 sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff,temp_k,temp_l))
+                
             else:
                 sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-1,temp_k,temp_l))
 
     return sa_idx
 
+
+def print_output(sa_index_set, sa, s):
+    '''print formatted output'''
+    sa_values = [sa[i] for i in sa_index_set]
+
+    print '-----------------------------------------'
+    print str(len(sa_values)) + " match(es) found!\n"
+    print "Position\tSuffix\n"
+    for v in sa_values:
+        print str(v) + "\t\t" + s[(v-1):]
+
+    print '----------------------------------------'
 
 def test():
     s = 'ATGCGTAATGCCGTCGATCG'
@@ -225,24 +255,23 @@ def test():
     #print("BW: " + bw) 
     #print("BWR: " + bwr + '\n')
 
-    sa_index_set = inexact_search(bw,bwr,'GTA',1)
-    sa_values = [sa[i] for i in sa_index_set]
-
-    print str(len(sa_values)) + " match(es) found!\n"
-    print "Position\tSuffix\n"
-    for v in sa_values:
-        print str(v) + "\t\t" + s[(v-1):]
-
+    print_output( inexact_search(bw,bwr,'GTA',1), sa, s)
+    
     #print "\nfinal ranges: " + str(sa_ranges) + "\n"
 
 
 def main():
     
 
-    threshold = 100 # this will be the z value
+    threshold = 1 # this will be the z value
+
+    if '--no-indels' in sys.argv:
+        global NO_INDELS
+        NO_INDELS = True
+
 
     if len(sys.argv) == 1:
-        print ('usage: python bwt.py [test|<reference file name>] [<read file name>]')
+        print ('\nusage: python bwt.py [--no-indels] [test|<reference file name>] [<read file name>]\n')
         return
 
     elif sys.argv[1].lower() == 'test':
@@ -251,27 +280,24 @@ def main():
     
 
     elif len(sys.argv) < 3:
-        print ('usage: python bwt.py [test|<reference file name>] [<read file name>]')
+        print ('\nusage: python bwt.py [test|<reference file name>] [<read file name>]\n')
         return
 
-    fread = open(sys.argv[2])
+    fread = open(sys.argv[-1])
+    fref = open(sys.argv[-2])
 
-    ref = fref.readlines().replace('\n','')
-    read = fread.readlines().replace('\n','')
+    ref = ''.join(fref.readlines()).replace('\n','')
+    read = ''.join(fread.readlines()).replace('\n','')
+
+    sa = suffix_array(ref)
+
 
     bw = bwt(ref)
     bwr = bwt(ref[::-1])
 
-    sa = suffix_array(ref)
+    
+    print_output(inexact_search(bw,bwr,read,threshold), sa, ref)
 
-    sa_indices = inexact_search(bw,bwr,read,threshold)
-
-    sa_values = [sa[i] for i in sa_indices]
-
-    print str(len(sa_values)) + " match(es) found!\n"
-    print "Position\tSuffix\n"
-    for v in sa_values:
-        print str(v) + "\t\t" + s[(v-1):]
 
 
 
