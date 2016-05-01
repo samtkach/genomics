@@ -180,10 +180,9 @@ def print_output(sa_index_list, sa, s):
 
     print '-----------------------------------------'
     print str(len(sa_values)) + " match(es) found!\n"
-    print "Position\tSuffix\n"
+    print "Score\t\tPosition\tSuffix\n"
     for v,x in sa_values:
-        print str(v) + "\t\t" + s[v:]
-        print "score: " + str(x)
+        print str(x) + "\t\t" + str(v) + "\t\t" + s[v:]
 
     print '----------------------------------------'
 
@@ -197,7 +196,7 @@ def test():
     #print("BW: " + bw) 
     #print("BWR: " + bwr + '\n')
 
-    print_output(inexact_search(bw,bwr,'GTAAT',1), sa, s)
+    print_output(inexact_search(bw,bwr,'GTA',1), sa, s)
     #print "\nfinal ranges: " + str(sa_ranges) + "\n"
 
 
