@@ -156,13 +156,20 @@ def rank(bw):
     totals = {}
     ranks = {}
 
-    for char in bw:
-        if char not in totals:
+#    for char in bw:
+#       if (char not in totals) and (char != '$'):
+#            totals[char] = 0
+#            ranks[char] = []
+
+    for char in ['A','C','G','T']:
+        if (char not in totals) and (char != '$'):
             totals[char] = 0
             ranks[char] = []
 
+
     for char in bw:
-        totals[char] += 1
+        if char != '$':
+            totals[char] += 1
         for t in totals.iterkeys():
             ranks[t].append(totals[t])
 
@@ -193,14 +200,26 @@ def count_matches_exact(bw,s):
     return r-l
 
 
+# bw is bwt of genome (B)
+# bwr is bwt of reverse genome (B')
+# s is short read to be matched (W)
+# diff is max num of differences (z)
+
 def inexact_search(bw, bwr, s, diff):
     '''find suffix array intervals with up to diff differences'''
-    #ranks, totals 
+    #ranks, totals
+    #O is a dictionary with keys $,A,C,G,T, and values are arrays of counts
     O,tot = rank(bw)
+
+    print('This is O:\n')
+    print O
 
     #reverse ranks
     Oprime,junk = rank(bwr)
     
+    print('This is Oprime:\n')
+    print Oprime
+
     #C[a] := number of lexicographically smaller letters than a in bw/reference
     C = compute_C(tot) 
 
@@ -208,22 +227,24 @@ def inexact_search(bw, bwr, s, diff):
     D = compute_D(s, C, Oprime, bw)
 
     #call the secursive search function and return a list of SA-range tuples
-    return inexact_recurse(s, len(s)-1, diff,1,len(bw)-1, D,C,O)
+    #return inexact_recurse(s, len(s)-1, diff,1,len(bw)-1, D,C,O)
+    return inexact_recursion(s, len(s)-1, diff,0,len(bw)-1, D,C,O)
+
 
 def compute_C(totals):
-    '''compute C, the number of lexographicalls greater symbols in the ref'''
-    C = {'a':0,'c':0,'g':0,'t':0,'$':0}
+    '''compute C, the number of lexographically greater symbols in the ref'''
+    C = {'A':0,'C':0,'G':0,'T':0}
     for k in totals:
         for ref in totals:
-            if ref < k: C[k] += totals[ref]
+            if ref != '$':
+                if ref < k: C[k] += totals[ref]
 
-#    print(C) ##DEBUG
+    print('compute_C() returning: ' + str(C) + '\n') ##DEBUG
     return C
 
 
 def compute_D(s, C, Oprime, bw):
     '''compute estimated lower bounds of differences in substring s[0:i] for all  in [0,len(s)]'''
-
     k = 1
     l = len(bw)-2
     z = 0
@@ -237,52 +258,110 @@ def compute_D(s, C, Oprime, bw):
             l = len(bw)-1
             z = z+1
         D[i] = z
-        print(str(k) + ', ' + str(l))
+        #print(str(k) + ', ' + str(l))
 
-#    print('compute_D() returning:\n' + str(D)) ##DEBUG
+    print('compute_D() returning: ' + str(D) + '\n') ##DEBUG
     return D
 
+
+# s is short read to be matched (W)
+# diff is max num of differences (z)
 def inexact_recurse(s,i,diff,k,l,D,C,O):
     '''recursion for inexact searching'''
-    if diff < D[i]: return []
-    
-    if i < 0: return [(k,l)]
 
-    I = []
-    I = I + inexact_recurse(s,i-1,diff-1,k,l,D,C,O) #gap
+    if diff < D[i]: 
+        return set()
     
-    for b in ['a','c','g','t']:
+    if i < 0: 
+        return {(k,l)}
+
+    I = set()
+    I = I.union(inexact_recurse(s,i-1,diff-1,k,l,D,C,O)) #gap
+    
+    for b in ['A','C','G','T']:
         k = C[b] + O[b][k-1] + 1
         l = C[b] + O[b][l]
 
         if k<=l:
-            I = I + inexact_recurse(s,i,diff-1,k,l,D,C,O) #gap
+            I = I.union(inexact_recurse(s,i,diff-1,k,l,D,C,O)) #gap
             if b == s[i]:
-                I = I + inexact_recurse(s,i-1,diff,k,l,D,C,O) #match
+                I = I.union(inexact_recurse(s,i-1,diff,k,l,D,C,O)) #match
             else:
-                I = I + inexact_recurse(s,i-1,diff-1,k,l,D,C,O) #substitution
+                I = I.union(inexact_recurse(s,i-1,diff-1,k,l,D,C,O)) #substitution
 
-#    print('inexact_recurse returning:\n' + str(list(set(I)))) ##DEBUG
-    return list(set(I))
+    #print('inexact_recurse returning: ' + str(I)) ##DEBUG
+    return I
 
+def get_D(i,D):
+    if i < 0:
+        return 0
+    else:
+        return D[i]
 
+def get_O(O, char, index):
+    if index < 0:
+        return 0
+    else:
+        return O[char][index]
 
+def inexact_recursion(s,i,diff,k,l,D,C,O):
+    new_set = set()
+
+    if diff < get_D(i,D):
+        return set()
+
+    if i < 0:
+        for m in range(k,l+1):
+            new_set.add(m)
+        return new_set
+
+    I = set()
+    I = I.union(inexact_recursion(s,i-1,diff-1,k,l,D,C,O))
+    for char in ['A','C','G','T']:
+        temp_k = C[char] + get_O(O, char, k-1) + 1
+        temp_l = C[char] + get_O(O, char, l)
+
+        if temp_k <= temp_l:
+            I = I.union(inexact_recursion(s,i,diff-1,temp_k,temp_l,D,C,O))
+            if char == s[i]:
+                I = I.union(inexact_recursion(s,i-1,diff,temp_k,temp_l,D,C,O))
+            else:
+                I = I.union(inexact_recursion(s,i-1,diff-1,temp_k,temp_l,D,C,O))
+
+    return I
 
 
 def test():
-    s = 'actactgacgtcagtcagttcagtacgtactactact'
+    s = 'ATGCGTAATGCCGTCGATCG'
     sa = suffix_array(s)
     bw = bwt(s)
     bwr = bwt(s[::-1])
-    sa_ranges = inexact_search(bw,bwr,'act',0)
+
+
+    print("BW: " + bw)
+    print("BWR: " + bwr + '\n')
+
+    sa_index_set = inexact_search(bw,bwr,'GTA',1)
+    sa_values = [sa[i] for i in sa_index_set]
+
+    print str(len(sa_values)) + " match(es) found!\n"
+    print "Position\tSuffix\n"
+    for v in sa_values:
+        print str(v) + "\t\t" + s[(v-1):]
+
+    #print "\nfinal ranges: " + str(sa_ranges) + "\n"
+
+    """
     for r in sa_ranges:
         (l,u) = r
         print('(l='+str(l)+',u='+str(u)+'):\n'+str(sa[l:u]))
 
         for i in sa[l:u]:
-            print(s[i:]+', '+str(i))
+            print(s[(i-1):]+', '+str(i))
     
-    
+        if l == u:
+            print(s[(l-1):]+', '+str(l))
+    """
 
 
  #   print(count_matches_exact(bw, 'atgatg'))
