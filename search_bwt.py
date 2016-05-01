@@ -5,6 +5,7 @@ inexact search over burrows-wheeler genome data
 
 import sys
 from enum import Enum
+from operator import itemgetter
 
 from bwt import *
 
@@ -23,14 +24,14 @@ D = [] #
 # enum represents the type of the alignment choice
 Type = Enum('Type', 'START MATCH MISMATCH INSERTION DELETION')
 
-# penalties:
-gap_open = 1
+# rewards/penalties:
+gap_open = 0
 gap_ext = 1
 mismatch = 1
+match = 0
 
 # option switches:
 NO_INDELS = False
-
 
 def inexact_search(bw, bwr, s, diff):
     '''find suffix array intervals with up to diff differences'''
@@ -60,8 +61,21 @@ def inexact_search(bw, bwr, s, diff):
     global D
     D = compute_D(s, C, Oprime, bw)
 
-    #call the secursive search function and return a list of SA-range tuples
-    return inexact_recursion(s, len(s)-1, diff,0,len(bw)-1, Type.START)
+    #call the recursive search function and return a list of SA-range tuples
+    sa_index_set = inexact_recursion(s, len(s)-1, diff,0,len(bw)-1, Type.START)
+    index_dict = {}
+
+    for (i,j) in sa_index_set:
+        #if index already exists, pick the higher diff value
+        if i in index_dict:
+            if index_dict[i] < j:
+                index_dict[i] = j
+        else:
+            index_dict[i] = j
+
+    # sort list by diff from highest to lowest
+    return sorted(index_dict.items(), key=itemgetter(1), reverse=True) 
+
 
 
 def compute_C(totals):
@@ -123,13 +137,13 @@ def inexact_recursion(s,i,diff,k,l, prev_type):
     temp = set()
     if i < 0:
         for j in range(k,l+1):
-            temp.add(j)
+            temp.add((j,diff))
         return temp
 
     #search
     sa_idx = set() #set of suffix array indices at which a match starts 
     
-    if not NO_INDELS: 
+    if not NO_INDELS:
     # Insertion
         if prev_type == Type.INSERTION:
             sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-gap_ext,k,l,Type.INSERTION))
@@ -149,24 +163,27 @@ def inexact_recursion(s,i,diff,k,l, prev_type):
                     sa_idx = sa_idx.union(inexact_recursion(s,i,diff-gap_ext-gap_open,temp_k,temp_l,Type.DELETION))
             if char == s[i]:
                 # Match!
-                sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff,temp_k,temp_l,Type.MATCH))
+                sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff+match,temp_k,temp_l,Type.MATCH))
                 
             else:
                 # Mismatch
                 sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-mismatch,temp_k,temp_l, Type.MISMATCH))
 
+    #print diff
     return sa_idx
 
 
-def print_output(sa_index_set, sa, s):
+def print_output(sa_index_list, sa, s):
     '''print formatted output'''
-    sa_values = [sa[i] for i in sa_index_set]
+    sa_values = [(sa[i],j) for (i,j) in sa_index_list]
+
 
     print '-----------------------------------------'
     print str(len(sa_values)) + " match(es) found!\n"
     print "Position\tSuffix\n"
-    for v in sa_values:
+    for v,x in sa_values:
         print str(v) + "\t\t" + s[v:]
+        print "score: " + str(x)
 
     print '----------------------------------------'
 
@@ -180,17 +197,14 @@ def test():
     #print("BW: " + bw) 
     #print("BWR: " + bwr + '\n')
 
-    print_output( inexact_search(bw,bwr,'GTA',1), sa, s)
-    
+    print_output(inexact_search(bw,bwr,'GTAAT',1), sa, s)
     #print "\nfinal ranges: " + str(sa_ranges) + "\n"
 
 
 def main():
-    
 
     threshold = 1 # this will be the z value
-    usage = ('\nusage: python bwt_search.py [--no-indels] [test|<reference file name>] [<read file name>]\n')
-
+    usage = ('\nusage: python search_bwt.py [--no-indels] [test|<reference file name>] [<read file name>]\n')
 
     if '--no-indels' in sys.argv:
         global NO_INDELS
@@ -218,14 +232,14 @@ def main():
 
     sa = suffix_array(ref)
 
-
     bw = bwt(ref)
     bwr = bwt(ref[::-1])
 
-    
+    print read
     print_output(inexact_search(bw,bwr,read,threshold), sa, ref)
 
-
+    fread.close()
+    fref.close()
 
 
 main()
