@@ -3,113 +3,12 @@ written by tkach
 burrows-wheeler transform for genome data
 '''
 
-from functools import partial
 import sys
-
-def bwt_radix(s):
-    s += "\0"
-    return ''.join(s[i-1] for i in radix_sort(range(len(s)), partial(bw_key, s)))
-
-
-
-def radix_sort(values, key, step=0):
-    if len(values) < 2:
-        for v in values:
-            yield v
-        return
-
-    bins = {}
-    for v in values:
-        bins.setdefault(key(v,step), []).append(v)
-
-    for k in sorted(bins.keys()):
-        for r in radix_sort(bins[k], key, step + 1):
-            yield r
-
-
-
-def radix_key(text, value, step):
-    return text[(value+step) % len(text)]
-
-def old_count_matches_nerrors(bw, s, n):
-    ranks,totals = rank(bw)
-    fc = first_col(totals)
-
-    if s[-1] not in fc:
-        return None
-
-    l,r = fc[s[-1]]
-    possibles = range(l,r)
-    errors = [0] * len(possibles)
-
-    while i >= 0 and r > 1:
-        char = s[i]
-
-        for j in range(1,len(possibles)-1):
-            ll = fc[char][0] + ranks[char][l-j]
-            rr = fc[char][0] + ranks[char][r-j]
-            
-
-
-
-        l = fc[char][0] + ranks[char][l-1]
-        r = fc[char][0] + ranks[char][r-1]
-        i-=1
-       
-    return r-l
-
-def rank_naive(bw):
-    '''counts total occurences of each character and 
-       counts number of occurences of a row's char until that row (rank)'''
-    totals = dict()
-    ranks = []
-    for char in bw:
-        if char not in totals.keys():
-            totals[char] = 0
-        ranks.append(totals[char])
-        totals[char] += 1
-    return ranks, totals
-
-def count_matches_naive(bw, s):
-    '''see how many matches s has in bw'''
-    ranks,totals = rank(bw)
-    fc = first_col(totals)
-    l,r = fc[s[-1]]
-    i = len(s)-2
-    while i >= 0 and r > 1:
-        char = s[i]
-        # iterate and find occurences of char
-        j = 1
-        while j < r:
-            if bw[j] == char: 
-                l = first[char][0] + ranks[j]
-                break
-            j+=1
-
-        # no occurences condition
-        if j == r: 
-            l = r
-            break
-
-        r-=1
-        while bw[r] != char:
-            r-=1
-
-        r = fc[char][0] + ranks[r] + 1
-        i-=1
-
-    return r - 1
-
-# -----------------------------------------------------------------------------
-
-
-
 
 def suffix_array(s):
     '''build suffix array of string s'''
     sa = sorted([(s[i:], i) for i in xrange(0, len(s)+1)])
     return map(lambda x: x[1], sa)
-
 
 
 def bwt(t):
@@ -121,7 +20,6 @@ def bwt(t):
         else:
             bw.append(t[i-1])
     return ''.join(bw)
-
 
 
 
@@ -152,16 +50,12 @@ def ibwt(bw):
 
 
 def rank(bw):
-    ''''''
+    '''rank(char) := list of number of occurences of a char for each substring R[:i] (reference)'''
     totals = {}
     ranks = {}
 
-#    for char in bw:
-#       if (char not in totals) and (char != '$'):
-#            totals[char] = 0
-#            ranks[char] = []
 
-    for char in ['A','C','G','T']:
+    for char in alphabet:
         if (char not in totals) and (char != '$'):
             totals[char] = 0
             ranks[char] = []
@@ -205,41 +99,51 @@ def count_matches_exact(bw,s):
 # s is short read to be matched (W)
 # diff is max num of differences (z)
 
+alphabet = set(['A', 'T', 'C', 'G'])
+C = {}
+O = {}
+D = []
+
 def inexact_search(bw, bwr, s, diff):
     '''find suffix array intervals with up to diff differences'''
+    
+    
     #ranks, totals
     #O is a dictionary with keys $,A,C,G,T, and values are arrays of counts
+    global O
     O,tot = rank(bw)
-
-    print('This is O:\n')
-    print O
+    
+    ##DEBUG
+    #print('This is O:\n')
+    #print O
 
     #reverse ranks
     Oprime,junk = rank(bwr)
     
-    print('This is Oprime:\n')
-    print Oprime
+    ##DEBUG
+    #print('This is Oprime:\n')
+    #print Oprime
 
     #C[a] := number of lexicographically smaller letters than a in bw/reference
+    global C
     C = compute_C(tot) 
 
     #D[i] := lower bound on number of differences in substring s[1:i] 
+    global D
     D = compute_D(s, C, Oprime, bw)
 
     #call the secursive search function and return a list of SA-range tuples
-    #return inexact_recurse(s, len(s)-1, diff,1,len(bw)-1, D,C,O)
-    return inexact_recursion(s, len(s)-1, diff,0,len(bw)-1, D,C,O)
+    return inexact_recursion(s, len(s)-1, diff,0,len(bw)-1)
 
 
 def compute_C(totals):
     '''compute C, the number of lexographically greater symbols in the ref'''
     C = {'A':0,'C':0,'G':0,'T':0}
-    for k in totals:
-        for ref in totals:
-            if ref != '$':
-                if ref < k: C[k] += totals[ref]
+    for k in alphabet:
+        for ref in alphabet:
+            if ref < k: C[k] += totals[ref]
 
-    print('compute_C() returning: ' + str(C) + '\n') ##DEBUG
+#    print('compute_C() returning: ' + str(C) + '\n') ##DEBUG
     return C
 
 
@@ -260,75 +164,55 @@ def compute_D(s, C, Oprime, bw):
         D[i] = z
         #print(str(k) + ', ' + str(l))
 
-    print('compute_D() returning: ' + str(D) + '\n') ##DEBUG
+#    print('compute_D() returning: ' + str(D) + '\n') ##DEBUG
     return D
 
 
-# s is short read to be matched (W)
-# diff is max num of differences (z)
-def inexact_recurse(s,i,diff,k,l,D,C,O):
-    '''recursion for inexact searching'''
 
-    if diff < D[i]: 
-        return set()
-    
-    if i < 0: 
-        return {(k,l)}
-
-    I = set()
-    I = I.union(inexact_recurse(s,i-1,diff-1,k,l,D,C,O)) #gap
-    
-    for b in ['A','C','G','T']:
-        k = C[b] + O[b][k-1] + 1
-        l = C[b] + O[b][l]
-
-        if k<=l:
-            I = I.union(inexact_recurse(s,i,diff-1,k,l,D,C,O)) #gap
-            if b == s[i]:
-                I = I.union(inexact_recurse(s,i-1,diff,k,l,D,C,O)) #match
-            else:
-                I = I.union(inexact_recurse(s,i-1,diff-1,k,l,D,C,O)) #substitution
-
-    #print('inexact_recurse returning: ' + str(I)) ##DEBUG
-    return I
-
-def get_D(i,D):
+def get_D(i):
+    '''enforse condiion that if D[i] is set to -1, its 
+       value will be considered as 0'''
     if i < 0:
         return 0
     else:
         return D[i]
 
-def get_O(O, char, index):
+def get_O(char, index):
+    '''see get_D()'''
     if index < 0:
         return 0
     else:
         return O[char][index]
 
-def inexact_recursion(s,i,diff,k,l,D,C,O):
-    new_set = set()
+def inexact_recursion(s,i,diff,k,l):
+    '''search bwt recursively and tolerate errors'''
 
-    if diff < get_D(i,D):
+    #pruning based on estimated mistakes
+    if diff < get_D(i):
         return set()
 
+    #end of query condition
+    temp = set()
     if i < 0:
-        for m in range(k,l+1):
-            new_set.add(m)
-        return new_set
+        for j in range(k,l+1):
+            temp.add(j)
+        return temp
 
-    I = set()
-    I = I.union(inexact_recursion(s,i-1,diff-1,k,l,D,C,O))
-    for char in ['A','C','G','T']:
-        temp_k = C[char] + get_O(O, char, k-1) + 1
-        temp_l = C[char] + get_O(O, char, l)
+    #search
+    sa_idx = set() #sset of suffix array indicces at which a match starts 
+    sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-1,k,l))
+    for char in alphabet:
+        temp_k = C[char] + get_O(char, k-1) + 1
+        temp_l = C[char] + get_O(char, l)
 
         if temp_k <= temp_l:
-            I = I.union(inexact_recursion(s,i,diff-1,temp_k,temp_l,D,C,O))
+            sa_idx = sa_idx.union(inexact_recursion(s,i,diff-1,temp_k,temp_l))
             if char == s[i]:
-                I = I.union(inexact_recursion(s,i-1,diff,temp_k,temp_l,D,C,O))
+                sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff,temp_k,temp_l))
             else:
-                I = I.union(inexact_recursion(s,i-1,diff-1,temp_k,temp_l,D,C,O))
+                sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-1,temp_k,temp_l))
 
-    return I
+    return sa_idx
 
 
 def test():
@@ -337,9 +221,9 @@ def test():
     bw = bwt(s)
     bwr = bwt(s[::-1])
 
-
-    print("BW: " + bw)
-    print("BWR: " + bwr + '\n')
+    ##DEBUG
+    #print("BW: " + bw) 
+    #print("BWR: " + bwr + '\n')
 
     sa_index_set = inexact_search(bw,bwr,'GTA',1)
     sa_values = [sa[i] for i in sa_index_set]
@@ -351,22 +235,44 @@ def test():
 
     #print "\nfinal ranges: " + str(sa_ranges) + "\n"
 
-    """
-    for r in sa_ranges:
-        (l,u) = r
-        print('(l='+str(l)+',u='+str(u)+'):\n'+str(sa[l:u]))
 
-        for i in sa[l:u]:
-            print(s[(i-1):]+', '+str(i))
+def main():
     
-        if l == u:
-            print(s[(l-1):]+', '+str(l))
-    """
 
+    threshold = 100 # this will be the z value
 
- #   print(count_matches_exact(bw, 'atgatg'))
- #   print(count_matches_nerrors(bw,bwr,'atgatg',1)
+    if len(sys.argv) == 1:
+        print ('usage: python bwt.py [test|<reference file name>] [<read file name>]')
+        return
+
+    elif sys.argv[1].lower() == 'test':
+        test()
+        return
     
-test()
-#print(bwt2(sys.argv[1]))
-#print(suffix_array(sys.argv[1]))
+
+    elif len(sys.argv) < 3:
+        print ('usage: python bwt.py [test|<reference file name>] [<read file name>]')
+        return
+
+    fread = open(sys.argv[2])
+
+    ref = fref.readlines().replace('\n','')
+    read = fread.readlines().replace('\n','')
+
+    bw = bwt(ref)
+    bwr = bwt(ref[::-1])
+
+    sa = suffix_array(ref)
+
+    sa_indices = inexact_search(bw,bwr,read,threshold)
+
+    sa_values = [sa[i] for i in sa_indices]
+
+    print str(len(sa_values)) + " match(es) found!\n"
+    print "Position\tSuffix\n"
+    for v in sa_values:
+        print str(v) + "\t\t" + s[(v-1):]
+
+
+
+main()
