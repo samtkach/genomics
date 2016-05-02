@@ -6,6 +6,7 @@ inexact search over burrows-wheeler genome data
 import sys
 from enum import Enum
 from operator import itemgetter
+import time
 
 from bwt import *
 
@@ -32,11 +33,14 @@ match = 0
 
 # option switches:
 NO_INDELS = False
+sub_mat = {}
+
+num_prunes = 0
 
 def inexact_search(bw, bwr, s, diff):
     '''find suffix array intervals with up to diff differences'''
     
-    
+    global num_prunes
     #ranks, totals
     #O is a dictionary with keys $,A,C,G,T, and values are arrays of counts
     global O
@@ -70,6 +74,8 @@ def inexact_search(bw, bwr, s, diff):
         if i in index_dict:
             if index_dict[i] < j:
                 index_dict[i] = j
+                num_prunes += 1
+
         else:
             index_dict[i] = j
 
@@ -128,9 +134,12 @@ def get_O(char, index):
 
 def inexact_recursion(s,i,diff,k,l, prev_type):
     '''search bwt recursively and tolerate errors'''
+    
+    global num_prunes
 
     #pruning based on estimated mistakes
     if diff < get_D(i):
+        num_prunes += 1
         return set()
 
     #end of query condition
@@ -167,10 +176,33 @@ def inexact_recursion(s,i,diff,k,l, prev_type):
                 
             else:
                 # Mismatch
-                sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-mismatch,temp_k,temp_l, Type.MISMATCH))
+                if sub_mat:
+                    sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-mismatch*sub_mat[(s[i],char)],temp_k,temp_l, Type.MISMATCH))
+                else:
+                    sa_idx = sa_idx.union(inexact_recursion(s,i-1,diff-mismatch,temp_k,temp_l, Type.MISMATCH))
 
     #print diff
     return sa_idx
+
+
+def estimate_substitution_mat(ref,r):
+    '''get likelihood of each substitution type over all possible alignments''' 
+    mismatches = {}
+
+    for i in range(0,len(ref)):
+        for j in range(0,len(r)):
+            if ref[i] != r[j]:
+                if (ref[i],r[j]) in mismatches: 
+                    mismatches[(ref[i],r[j])] += 1
+                else:
+                    mismatches[(ref[i],r[j])] = 1
+
+
+    scale = max(mismatches.values())
+
+    for k in mismatches: mismatches[k] = float(mismatches[k])/scale
+
+    return mismatches
 
 
 def print_output(sa_index_list, sa, s):
@@ -182,7 +214,7 @@ def print_output(sa_index_list, sa, s):
     print str(len(sa_values)) + " match(es) found!\n"
     print "Score\t\tPosition\tSuffix\n"
     for v,x in sa_values:
-        print str(x) + "\t\t" + str(v) + "\t\t" + s[v:]
+        print str(x) + "\t\t" + str(v) + "\t\t" + s[v:v+35]
 
     print '----------------------------------------'
 
@@ -201,6 +233,8 @@ def test():
 
 
 def main():
+
+    start = time.time()
 
     threshold = 1 # this will be the z value
     usage = ('\nusage: python search_bwt.py [--no-indels] [test|<reference file name>] [<read file name>]\n')
@@ -229,6 +263,12 @@ def main():
     ref = ''.join(fref.readlines()).replace('\n','')
     read = ''.join(fread.readlines()).replace('\n','')
 
+    # estimate the subsitution matrix
+    if not '--no-sub-mat' in sys.argv:
+        global sub_mat
+        sub_mat = estimate_substitution_mat(ref,read)
+
+
     sa = suffix_array(ref)
 
     bw = bwt(ref)
@@ -236,6 +276,10 @@ def main():
 
     print read
     print_output(inexact_search(bw,bwr,read,threshold), sa, ref)
+
+    elapsed = time.time() - start
+    if '--show-time' in sys.argv: print 'time elapsed: '+str(elapsed)
+    if '--count-prunes' in sys.argv: print str(num_prunes) + ' nodes pruned.'
 
     fread.close()
     fref.close()
