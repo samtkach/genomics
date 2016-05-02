@@ -256,10 +256,14 @@ def main():
         test()
         return
     
-
     elif len(sys.argv) < 3:
         print usage
         return
+
+    for i in range(0,len(sys.argv)):
+        if sys.argv[i] == '-t' and i < len(sys.argv)-2:
+            threshold = int(sys.argv[i+1])
+
 
     fread = open(sys.argv[-1])
     fref = open(sys.argv[-2])
@@ -284,7 +288,7 @@ def main():
     elapsed = time.time() - start
     if '--show-time' in sys.argv: print 'time elapsed: '+str(elapsed)
     if '--count-prunes' in sys.argv: print str(num_prunes) + ' nodes pruned.'
-
+    print "error score upper bound: " + str(threshold)
     fread.close()
     fref.close()
 
