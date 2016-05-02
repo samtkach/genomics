@@ -26,7 +26,7 @@ D = [] #
 Type = Enum('Type', 'START MATCH MISMATCH INSERTION DELETION')
 
 # rewards/penalties:
-gap_open = 0
+gap_open = 1
 gap_ext = 1
 mismatch = 1
 match = 0
@@ -243,6 +243,10 @@ def main():
         global NO_INDELS
         NO_INDELS = True
 
+    if '--linear-gaps' in sys.argv:
+        global gap_open, gap_ext
+        gap_open = 0
+        gap_ext = 1
 
     if len(sys.argv) == 1:
         print usage
