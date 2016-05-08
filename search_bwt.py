@@ -26,7 +26,7 @@ D = [] #
 Type = Enum('Type', 'START MATCH MISMATCH INSERTION DELETION')
 
 # rewards/penalties:
-gap_open = 1
+gap_open = 3
 gap_ext = 1
 mismatch = 1
 match = 0
@@ -82,6 +82,13 @@ def inexact_search(bw, bwr, s, diff):
     # sort list by diff from highest to lowest
     return sorted(index_dict.items(), key=itemgetter(1), reverse=True) 
 
+def best_match_position(bw, bwr, s, diff, sa):
+    sa_index_list = inexact_search(bw, bwr, s, diff)
+    if len(sa_index_list) != 0:
+        best_index, score = sa_index_list[0]
+        return sa[best_index]+1, score
+    else:
+        return -1,-1
 
 
 def compute_C(totals):
@@ -205,38 +212,40 @@ def estimate_substitution_mat(ref,r):
     return mismatches
 
 
-def print_output(sa_index_list, sa, s):
+def print_output(sa_index_list, sa, s, read):
     '''print formatted output'''
     sa_values = [(sa[i],j) for (i,j) in sa_index_list]
 
 
-    print '-----------------------------------------'
-    print str(len(sa_values)) + " match(es) found!\n"
-    print "Score\t\tPosition\tSuffix\n"
-    for v,x in sa_values:
-        print str(x) + "\t\t" + str(v) + "\t\t" + s[v:v+35]
+    print '\n-------------------------------------'
+    print 'Reference: ' + s
+    print 'Read: \t   ' + read + '\n'
 
-    print '----------------------------------------'
+    print str(len(sa_values)) + " match(es) found!\n"
+    print "Score\tPos.\tSuffix\n"
+    for v,x in sa_values:
+        print str(x) + "\t" + str(v) + "\t" + s[v:v+35]
+
+    print '-------------------------------------'
 
 def test():
-    s = 'ATGCGTAATGCCGTCGATCG'
+    #s = 'ATGCGTAATGCCGTCGATCG'
+    s = 'CGATCCGCGCTGCTGATGATCGATG'
+    read = 'GATGAT'
+    threshold = 2
+
     sa = suffix_array(s)
     bw = bwt(s)
     bwr = bwt(s[::-1])
 
-    ##DEBUG
-    #print("BW: " + bw) 
-    #print("BWR: " + bwr + '\n')
-
-    print_output(inexact_search(bw,bwr,'GTA',1), sa, s)
-    #print "\nfinal ranges: " + str(sa_ranges) + "\n"
+    print_output(inexact_search(bw,bwr,read,threshold), sa, s, read)
 
 
 def main():
 
     start = time.time()
 
-    threshold = 1 # this will be the z value
+    threshold = 3 # this will be the z value
     usage = ('\nusage: python search_bwt.py [--no-indels] [test|<reference file name>] [<read file name>]\n')
 
     if '--no-indels' in sys.argv:
@@ -293,4 +302,35 @@ def main():
     fref.close()
 
 
-main()
+if __name__ == "__main__":
+    main()
+
+"""
+threshold = 3: fast
+
+[3 1 1 0] 115/127
+[2 1 1 0] 117/127
+[1 1 1 0] 
+
+
+threshold = 4: medium
+
+[3 1 1 0]   120/127   18.3s
+[2 1 1 0]   120/127
+[1 1 1 0]
+
+threshold = 5: slow
+
+[3 1 1 0] 120/127
+[2 1 1 0] 120/127
+[3 1 1 .1] 120/127 281s
+
+threshold = 6:
+[5 2 3 0]       111/127     
+[5 2 3 .1]      118/127
+[5 2 3 .2]      119/127
+[6 4 1 0]       119/127     48.6s
+[6 4 1 .1]      120/127, 2 inc, 5 no matches 51.1s
+[3 2 .5 .05]    118/127, 1 inc, 9 no matches 46.2s
+
+"""
